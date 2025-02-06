@@ -20,7 +20,7 @@
 // the W3C short notice apply to the `Key` and `KeyCode` enums and their variants and the
 // documentation attached to their variants.
 
-// --------- BEGGINING OF W3C LICENSE --------------------------------------------------------------
+// --------- BEGINNING OF W3C LICENSE --------------------------------------------------------------
 //
 // License
 //
@@ -55,7 +55,7 @@
 //
 // --------- END OF W3C LICENSE --------------------------------------------------------------------
 
-// --------- BEGGINING OF W3C SHORT NOTICE ---------------------------------------------------------
+// --------- BEGINNING OF W3C SHORT NOTICE ---------------------------------------------------------
 //
 // winit: https://github.com/rust-windowing/winit
 //
@@ -84,7 +84,7 @@ pub use smol_str::SmolStr;
 /// haven't mapped for you yet, this lets you use use [`KeyCode`] to:
 ///
 /// - Correctly match key press and release events.
-/// - On non-web platforms, support assigning keybinds to virtually any key through a UI.
+/// - On non-Web platforms, support assigning keybinds to virtually any key through a UI.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum NativeKeyCode {
@@ -106,23 +106,23 @@ impl std::fmt::Debug for NativeKeyCode {
         match self {
             Unidentified => {
                 debug_tuple = f.debug_tuple("Unidentified");
-            }
+            },
             Android(code) => {
                 debug_tuple = f.debug_tuple("Android");
                 debug_tuple.field(&format_args!("0x{code:04X}"));
-            }
+            },
             MacOS(code) => {
                 debug_tuple = f.debug_tuple("MacOS");
                 debug_tuple.field(&format_args!("0x{code:04X}"));
-            }
+            },
             Windows(code) => {
                 debug_tuple = f.debug_tuple("Windows");
                 debug_tuple.field(&format_args!("0x{code:04X}"));
-            }
+            },
             Xkb(code) => {
                 debug_tuple = f.debug_tuple("Xkb");
                 debug_tuple.field(&format_args!("0x{code:04X}"));
-            }
+            },
         }
         debug_tuple.finish()
     }
@@ -162,27 +162,27 @@ impl std::fmt::Debug for NativeKey {
         match self {
             Unidentified => {
                 debug_tuple = f.debug_tuple("Unidentified");
-            }
+            },
             Android(code) => {
                 debug_tuple = f.debug_tuple("Android");
                 debug_tuple.field(&format_args!("0x{code:04X}"));
-            }
+            },
             MacOS(code) => {
                 debug_tuple = f.debug_tuple("MacOS");
                 debug_tuple.field(&format_args!("0x{code:04X}"));
-            }
+            },
             Windows(code) => {
                 debug_tuple = f.debug_tuple("Windows");
                 debug_tuple.field(&format_args!("0x{code:04X}"));
-            }
+            },
             Xkb(code) => {
                 debug_tuple = f.debug_tuple("Xkb");
                 debug_tuple.field(&format_args!("0x{code:04X}"));
-            }
+            },
             Web(code) => {
                 debug_tuple = f.debug_tuple("Web");
                 debug_tuple.field(code);
-            }
+            },
         }
         debug_tuple.finish()
     }
@@ -218,7 +218,7 @@ impl PartialEq<NativeKeyCode> for NativeKey {
 
 /// Represents the location of a physical key.
 ///
-/// This type is a superset of [`KeyCode`], including an [`Unidentified`](Self::Unidentified)
+/// This type is a superset of [`KeyCode`], including an [`Unidentified`][Self::Unidentified]
 /// variant.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
@@ -442,7 +442,8 @@ pub enum KeyCode {
     Tab,
     /// Japanese: <kbd>変</kbd> (henkan)
     Convert,
-    /// Japanese: <kbd>カタカナ</kbd>/<kbd>ひらがな</kbd>/<kbd>ローマ字</kbd> (katakana/hiragana/romaji)
+    /// Japanese: <kbd>カタカナ</kbd>/<kbd>ひらがな</kbd>/<kbd>ローマ字</kbd>
+    /// (katakana/hiragana/romaji)
     KanaMode,
     /// Korean: HangulMode <kbd>한/영</kbd> (han/yeong)
     ///
@@ -490,7 +491,8 @@ pub enum KeyCode {
     NumLock,
     /// <kbd>0 Ins</kbd> on a keyboard. <kbd>0</kbd> on a phone or remote control
     Numpad0,
-    /// <kbd>1 End</kbd> on a keyboard. <kbd>1</kbd> or <kbd>1 QZ</kbd> on a phone or remote control
+    /// <kbd>1 End</kbd> on a keyboard. <kbd>1</kbd> or <kbd>1 QZ</kbd> on a phone or remote
+    /// control
     Numpad1,
     /// <kbd>2 ↓</kbd> on a keyboard. <kbd>2 ABC</kbd> on a phone or remote control
     Numpad2,
@@ -744,7 +746,7 @@ pub enum KeyCode {
 /// - The `Super` variant here, is named `Meta` in the aforementioned specification. (There's
 ///   another key which the specification calls `Super`. That does not exist here.)
 /// - The `Space` variant here, can be identified by the character it generates in the
-///   specificaiton.
+///   specification.
 ///
 /// [`KeyboardEvent.key`]: https://w3c.github.io/uievents-key/
 #[non_exhaustive]
@@ -794,13 +796,14 @@ pub enum NamedKey {
     // Legacy modifier key.
     Hyper,
     /// Used to enable "super" modifier function for interpreting concurrent or subsequent keyboard
-    /// input. This key value is used for the "Windows Logo" key and the Apple `Command` or `⌘` key.
+    /// input. This key value is used for the "Windows Logo" key and the Apple `Command` or `⌘`
+    /// key.
     ///
     /// Note: In some contexts (e.g. the Web) this is referred to as the "Meta" key.
     Super,
-    /// The `Enter` or `↵` key. Used to activate current selection or accept current input. This key
-    /// value is also used for the `Return` (Macintosh numpad) key. This key value is also used for
-    /// the Android `KEYCODE_DPAD_CENTER`.
+    /// The `Enter` or `↵` key. Used to activate current selection or accept current input. This
+    /// key value is also used for the `Return` (Macintosh numpad) key. This key value is also
+    /// used for the Android `KEYCODE_DPAD_CENTER`.
     Enter,
     /// The Horizontal Tabulation `Tab` key.
     Tab,
@@ -836,8 +839,8 @@ pub enum NamedKey {
     CrSel,
     /// Cut the current selection. (`APPCOMMAND_CUT`)
     Cut,
-    /// Used to delete the character to the right of the cursor. This key value is also used for the
-    /// key labeled `Delete` on MacOS keyboards when `Fn` is active.
+    /// Used to delete the character to the right of the cursor. This key value is also used for
+    /// the key labeled `Delete` on MacOS keyboards when `Fn` is active.
     Delete,
     /// The Erase to End of Field key. This key deletes all characters from the current cursor
     /// position to the end of the current field.
@@ -914,15 +917,15 @@ pub enum NamedKey {
     Standby,
     /// The WakeUp key. (`KEYCODE_WAKEUP`)
     WakeUp,
-    /// Initate the multi-candidate mode.
+    /// Initiate the multi-candidate mode.
     AllCandidates,
     Alphanumeric,
     /// Initiate the Code Input mode to allow characters to be entered by
     /// their code points.
     CodeInput,
     /// The Compose key, also known as "Multi_key" on the X Window System. This key acts in a
-    /// manner similar to a dead key, triggering a mode where subsequent key presses are combined to
-    /// produce a different character.
+    /// manner similar to a dead key, triggering a mode where subsequent key presses are combined
+    /// to produce a different character.
     Compose,
     /// Convert the current input method sequence.
     Convert,
@@ -961,9 +964,9 @@ pub enum NamedKey {
     /// The Kana Mode (Kana Lock) key. This key is used to enter hiragana mode (typically from
     /// romaji mode).
     KanaMode,
-    /// The Kanji (Japanese name for ideographic characters of Chinese origin) Mode key. This key is
-    /// typically used to switch to a hiragana keyboard for the purpose of converting input into
-    /// kanji. (`KEYCODE_KANA`)
+    /// The Kanji (Japanese name for ideographic characters of Chinese origin) Mode key. This key
+    /// is typically used to switch to a hiragana keyboard for the purpose of converting input
+    /// into kanji. (`KEYCODE_KANA`)
     KanjiMode,
     /// The Katakana (Japanese Kana characters) key.
     Katakana,
@@ -1459,7 +1462,7 @@ pub enum NamedKey {
 /// This is a superset of the UI Events Specification's [`KeyboardEvent.key`] with
 /// additions:
 /// - All simple variants are wrapped under the `Named` variant
-/// - The `Unidentified` variant here, can still identifiy a key through it's `NativeKeyCode`.
+/// - The `Unidentified` variant here, can still identify a key through it's `NativeKeyCode`.
 /// - The `Dead` variant here, can specify the character which is inserted when pressing the
 ///   dead-key twice.
 ///
@@ -1565,10 +1568,15 @@ impl NamedKey {
     /// # Examples
     ///
     /// ```
+    /// # #[cfg(web_platform)]
+    /// # wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
+    /// # #[cfg_attr(web_platform, wasm_bindgen_test::wasm_bindgen_test)]
+    /// # fn main() {
     /// use winit::keyboard::NamedKey;
     ///
     /// assert_eq!(NamedKey::Enter.to_text(), Some("\r"));
     /// assert_eq!(NamedKey::F20.to_text(), None);
+    /// # }
     /// ```
     pub fn to_text(&self) -> Option<&str> {
         match self {
@@ -1588,11 +1596,16 @@ impl Key {
     /// # Examples
     ///
     /// ```
-    /// use winit::keyboard::{NamedKey, Key};
+    /// # #[cfg(web_platform)]
+    /// # wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
+    /// # #[cfg_attr(web_platform, wasm_bindgen_test::wasm_bindgen_test)]
+    /// # fn main() {
+    /// use winit::keyboard::{Key, NamedKey};
     ///
     /// assert_eq!(Key::Character("a".into()).to_text(), Some("a"));
     /// assert_eq!(Key::Named(NamedKey::Enter).to_text(), Some("\r"));
     /// assert_eq!(Key::Named(NamedKey::F20).to_text(), None);
+    /// # }
     /// ```
     pub fn to_text(&self) -> Option<&str> {
         match self {
@@ -1610,17 +1623,18 @@ impl Key {
 /// keys can be above the letters or on the numpad. This enum allows the user to differentiate
 /// them.
 ///
-/// See the documentation for the [`location`] field on the [`KeyEvent`] struct for more information.
+/// See the documentation for the [`location`] field on the [`KeyEvent`] struct for more
+/// information.
 ///
 /// [`location`]: ../event/struct.KeyEvent.html#structfield.location
 /// [`KeyEvent`]: crate::event::KeyEvent
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum KeyLocation {
     /// The key is in its "normal" location on the keyboard.
     ///
-    /// For instance, the "1" key above the "Q" key on a QWERTY keyboard will use this location. This
-    /// invariant is also returned when the location of the key cannot be identified.
+    /// For instance, the "1" key above the "Q" key on a QWERTY keyboard will use this location.
+    /// This invariant is also returned when the location of the key cannot be identified.
     ///
     /// ![Standard 1 key](https://raw.githubusercontent.com/rust-windowing/winit/master/docs/res/keyboard_standard_1_key.svg)
     ///
@@ -1686,6 +1700,7 @@ bitflags! {
     ///
     /// Each flag represents a modifier and is set if this modifier is active.
     #[derive(Default, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
     pub struct ModifiersState: u32 {
         /// The "shift" key.
         const SHIFT = 0b100;
@@ -1703,14 +1718,17 @@ impl ModifiersState {
     pub fn shift_key(&self) -> bool {
         self.intersects(Self::SHIFT)
     }
+
     /// Returns `true` if the control key is pressed.
     pub fn control_key(&self) -> bool {
         self.intersects(Self::CONTROL)
     }
+
     /// Returns `true` if the alt key is pressed.
     pub fn alt_key(&self) -> bool {
         self.intersects(Self::ALT)
     }
+
     /// Returns `true` if the super key is pressed.
     pub fn super_key(&self) -> bool {
         self.intersects(Self::SUPER)
@@ -1718,7 +1736,8 @@ impl ModifiersState {
 }
 
 /// The state of the particular modifiers key.
-#[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum ModifiersKeyState {
     /// The particular key is pressed.
     Pressed,
@@ -1737,6 +1756,7 @@ pub enum ModifiersKeyState {
 // on macOS due to their AltGr/Option situation.
 bitflags! {
     #[derive(Default, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+    #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
     pub(crate) struct ModifiersKeys: u8 {
         const LSHIFT   = 0b0000_0001;
         const RSHIFT   = 0b0000_0010;
@@ -1746,56 +1766,5 @@ bitflags! {
         const RALT     = 0b0010_0000;
         const LSUPER   = 0b0100_0000;
         const RSUPER   = 0b1000_0000;
-    }
-}
-
-#[cfg(feature = "serde")]
-mod modifiers_serde {
-    use super::ModifiersState;
-    use serde::{Deserialize, Deserializer, Serialize, Serializer};
-
-    #[derive(Default, Serialize, Deserialize)]
-    #[serde(default)]
-    #[serde(rename = "ModifiersState")]
-    pub struct ModifiersStateSerialize {
-        pub shift_key: bool,
-        pub control_key: bool,
-        pub alt_key: bool,
-        pub super_key: bool,
-    }
-
-    impl Serialize for ModifiersState {
-        fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-        where
-            S: Serializer,
-        {
-            let s = ModifiersStateSerialize {
-                shift_key: self.shift_key(),
-                control_key: self.control_key(),
-                alt_key: self.alt_key(),
-                super_key: self.super_key(),
-            };
-            s.serialize(serializer)
-        }
-    }
-
-    impl<'de> Deserialize<'de> for ModifiersState {
-        fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-        where
-            D: Deserializer<'de>,
-        {
-            let ModifiersStateSerialize {
-                shift_key,
-                control_key,
-                alt_key,
-                super_key,
-            } = ModifiersStateSerialize::deserialize(deserializer)?;
-            let mut m = ModifiersState::empty();
-            m.set(ModifiersState::SHIFT, shift_key);
-            m.set(ModifiersState::CONTROL, control_key);
-            m.set(ModifiersState::ALT, alt_key);
-            m.set(ModifiersState::SUPER, super_key);
-            Ok(m)
-        }
     }
 }

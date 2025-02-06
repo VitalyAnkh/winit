@@ -1,32 +1,22 @@
-#![cfg(windows_platform)]
-
 use smol_str::SmolStr;
-use windows_sys::Win32::{
-    Foundation::{HANDLE, HWND},
-    UI::WindowsAndMessaging::{HMENU, WINDOW_LONG_PTR_INDEX},
-};
+use windows_sys::Win32::Foundation::HWND;
+use windows_sys::Win32::UI::WindowsAndMessaging::{HMENU, WINDOW_LONG_PTR_INDEX};
 
-pub(crate) use self::{
-    event_loop::{
-        EventLoop, EventLoopProxy, EventLoopWindowTarget, PlatformSpecificEventLoopAttributes,
-    },
-    icon::{SelectedCursor, WinIcon},
-    keyboard::{physicalkey_to_scancode, scancode_to_physicalkey},
-    monitor::{MonitorHandle, VideoModeHandle},
-    window::Window,
-};
-
-pub(crate) use self::icon::WinCursor as PlatformCustomCursor;
+pub(crate) use self::event_loop::{EventLoop, PlatformSpecificEventLoopAttributes};
 pub use self::icon::WinIcon as PlatformIcon;
-pub(crate) use crate::cursor::OnlyCursorImageBuilder as PlatformCustomCursorBuilder;
-use crate::platform_impl::Fullscreen;
-
-use crate::event::DeviceId as RootDeviceId;
+pub(crate) use self::icon::{SelectedCursor, WinCursor as PlatformCustomCursor, WinIcon};
+pub(crate) use self::keyboard::{physicalkey_to_scancode, scancode_to_physicalkey};
+pub(crate) use self::monitor::MonitorHandle;
+pub(crate) use self::window::Window;
+pub(crate) use crate::cursor::OnlyCursorImageSource as PlatformCustomCursorSource;
+use crate::event::DeviceId;
 use crate::icon::Icon;
 use crate::keyboard::Key;
+use crate::platform::windows::{BackdropType, Color, CornerPreference};
+use crate::platform_impl::Fullscreen;
 
-#[derive(Clone)]
-pub struct PlatformSpecificWindowBuilderAttributes {
+#[derive(Clone, Debug, PartialEq)]
+pub struct PlatformSpecificWindowAttributes {
     pub owner: Option<HWND>,
     pub menu: Option<HMENU>,
     pub taskbar_icon: Option<Icon>,
@@ -35,9 +25,15 @@ pub struct PlatformSpecificWindowBuilderAttributes {
     pub skip_taskbar: bool,
     pub class_name: String,
     pub decoration_shadow: bool,
+    pub backdrop_type: BackdropType,
+    pub clip_children: bool,
+    pub border_color: Option<Color>,
+    pub title_background_color: Option<Color>,
+    pub title_text_color: Option<Color>,
+    pub corner_preference: Option<CornerPreference>,
 }
 
-impl Default for PlatformSpecificWindowBuilderAttributes {
+impl Default for PlatformSpecificWindowAttributes {
     fn default() -> Self {
         Self {
             owner: None,
@@ -48,80 +44,27 @@ impl Default for PlatformSpecificWindowBuilderAttributes {
             skip_taskbar: false,
             class_name: "Window Class".to_string(),
             decoration_shadow: false,
+            backdrop_type: BackdropType::default(),
+            clip_children: true,
+            border_color: None,
+            title_background_color: None,
+            title_text_color: None,
+            corner_preference: None,
         }
     }
 }
 
-unsafe impl Send for PlatformSpecificWindowBuilderAttributes {}
-unsafe impl Sync for PlatformSpecificWindowBuilderAttributes {}
+unsafe impl Send for PlatformSpecificWindowAttributes {}
+unsafe impl Sync for PlatformSpecificWindowAttributes {}
 
-// Cursor name in UTF-16. Used to set cursor in `WM_SETCURSOR`.
-#[derive(Debug, Clone, Copy)]
-pub struct Cursor(pub *const u16);
-unsafe impl Send for Cursor {}
-unsafe impl Sync for Cursor {}
-
-#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct DeviceId(u32);
-
-impl DeviceId {
-    pub const unsafe fn dummy() -> Self {
-        DeviceId(0)
-    }
+fn wrap_device_id(id: u32) -> DeviceId {
+    DeviceId::from_raw(id as i64)
 }
-
-impl DeviceId {
-    pub fn persistent_identifier(&self) -> Option<String> {
-        if self.0 != 0 {
-            raw_input::get_raw_input_device_name(self.0 as HANDLE)
-        } else {
-            None
-        }
-    }
-}
-
-// Constant device ID, to be removed when this backend is updated to report real device IDs.
-const DEVICE_ID: RootDeviceId = RootDeviceId(DeviceId(0));
-
-fn wrap_device_id(id: u32) -> RootDeviceId {
-    RootDeviceId(DeviceId(id))
-}
-
-pub type OsError = std::io::Error;
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct KeyEventExtra {
     pub text_with_all_modifiers: Option<SmolStr>,
     pub key_without_modifiers: Key,
-}
-
-#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct WindowId(HWND);
-unsafe impl Send for WindowId {}
-unsafe impl Sync for WindowId {}
-
-impl WindowId {
-    pub const unsafe fn dummy() -> Self {
-        WindowId(0)
-    }
-}
-
-impl From<WindowId> for u64 {
-    fn from(window_id: WindowId) -> Self {
-        window_id.0 as u64
-    }
-}
-
-impl From<WindowId> for HWND {
-    fn from(window_id: WindowId) -> Self {
-        window_id.0
-    }
-}
-
-impl From<u64> for WindowId {
-    fn from(raw_id: u64) -> Self {
-        Self(raw_id as HWND)
-    }
 }
 
 #[inline(always)]
@@ -141,17 +84,17 @@ const fn get_y_lparam(x: u32) -> i16 {
 
 #[inline(always)]
 pub(crate) const fn primarylangid(lgid: u16) -> u16 {
-    lgid & 0x3FF
+    lgid & 0x3ff
 }
 
 #[inline(always)]
 pub(crate) const fn loword(x: u32) -> u16 {
-    (x & 0xFFFF) as u16
+    (x & 0xffff) as u16
 }
 
 #[inline(always)]
 const fn hiword(x: u32) -> u16 {
-    ((x >> 16) & 0xFFFF) as u16
+    ((x >> 16) & 0xffff) as u16
 }
 
 #[inline(always)]
@@ -189,6 +132,6 @@ mod ime;
 mod keyboard;
 mod keyboard_layout;
 mod monitor;
-mod raw_input;
+pub(crate) mod raw_input;
 mod window;
 mod window_state;

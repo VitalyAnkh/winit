@@ -3,16 +3,17 @@
 use std::sync::Arc;
 
 use ahash::AHashMap;
-
+use sctk::reexports::client::backend::ObjectId;
 use sctk::reexports::client::protocol::wl_seat::WlSeat;
 use sctk::reexports::client::protocol::wl_touch::WlTouch;
 use sctk::reexports::client::{Connection, Proxy, QueueHandle};
 use sctk::reexports::protocols::wp::relative_pointer::zv1::client::zwp_relative_pointer_v1::ZwpRelativePointerV1;
 use sctk::reexports::protocols::wp::text_input::zv3::client::zwp_text_input_v3::ZwpTextInputV3;
-
 use sctk::seat::pointer::{ThemeSpec, ThemedPointer};
 use sctk::seat::{Capability as SeatCapability, SeatHandler, SeatState};
+use tracing::warn;
 
+use crate::event::WindowEvent;
 use crate::keyboard::ModifiersState;
 use crate::platform_impl::wayland::state::WinitState;
 
@@ -21,12 +22,11 @@ mod pointer;
 mod text_input;
 mod touch;
 
+use keyboard::{KeyboardData, KeyboardState};
 pub use pointer::relative_pointer::RelativePointerState;
 pub use pointer::{PointerConstraintsState, WinitPointerData, WinitPointerDataExt};
-pub use text_input::{TextInputState, ZwpTextInputV3Ext};
-
-use keyboard::{KeyboardData, KeyboardState};
 use text_input::TextInputData;
+pub use text_input::{TextInputState, ZwpTextInputV3Ext};
 use touch::TouchPoint;
 
 #[derive(Debug, Default)]
@@ -40,6 +40,9 @@ pub struct WinitSeatState {
     /// The mapping from touched points to the surfaces they're present.
     touch_map: AHashMap<i32, TouchPoint>,
 
+    /// Id of the first touch event.
+    first_touch_id: Option<i32>,
+
     /// The text input bound on the seat.
     text_input: Option<Arc<ZwpTextInputV3>>,
 
@@ -52,7 +55,7 @@ pub struct WinitSeatState {
     /// The current modifiers state on the seat.
     modifiers: ModifiersState,
 
-    /// Wether we have pending modifiers.
+    /// Whether we have pending modifiers.
     modifiers_pending: bool,
 }
 
@@ -74,17 +77,23 @@ impl SeatHandler for WinitState {
         seat: WlSeat,
         capability: SeatCapability,
     ) {
-        let seat_state = self.seats.get_mut(&seat.id()).unwrap();
+        let seat_state = match self.seats.get_mut(&seat.id()) {
+            Some(seat_state) => seat_state,
+            None => {
+                warn!("Received wl_seat::new_capability for unknown seat");
+                return;
+            },
+        };
 
         match capability {
             SeatCapability::Touch if seat_state.touch.is_none() => {
                 seat_state.touch = self.seat_state.get_touch(queue_handle, &seat).ok();
-            }
+            },
             SeatCapability::Keyboard if seat_state.keyboard_state.is_none() => {
                 let keyboard = seat.get_keyboard(queue_handle, KeyboardData::new(seat.clone()));
                 seat_state.keyboard_state =
                     Some(KeyboardState::new(keyboard, self.loop_handle.clone()));
-            }
+            },
             SeatCapability::Pointer if seat_state.pointer.is_none() => {
                 let surface = self.compositor_state.create_surface(queue_handle);
                 let surface_id = surface.id();
@@ -112,19 +121,15 @@ impl SeatHandler for WinitState {
                 let themed_pointer = Arc::new(themed_pointer);
 
                 // Register cursor surface.
-                self.pointer_surfaces
-                    .insert(surface_id, themed_pointer.clone());
+                self.pointer_surfaces.insert(surface_id, themed_pointer.clone());
 
                 seat_state.pointer = Some(themed_pointer);
-            }
+            },
             _ => (),
         }
 
-        if let Some(text_input_state) = seat_state
-            .text_input
-            .is_none()
-            .then_some(self.text_input_state.as_ref())
-            .flatten()
+        if let Some(text_input_state) =
+            seat_state.text_input.is_none().then_some(self.text_input_state.as_ref()).flatten()
         {
             seat_state.text_input = Some(Arc::new(text_input_state.get_text_input(
                 &seat,
@@ -141,7 +146,17 @@ impl SeatHandler for WinitState {
         seat: WlSeat,
         capability: SeatCapability,
     ) {
-        let seat_state = self.seats.get_mut(&seat.id()).unwrap();
+        let seat_state = match self.seats.get_mut(&seat.id()) {
+            Some(seat_state) => seat_state,
+            None => {
+                warn!("Received wl_seat::remove_capability for unknown seat");
+                return;
+            },
+        };
+
+        if let Some(text_input) = seat_state.text_input.take() {
+            text_input.destroy();
+        }
 
         match capability {
             SeatCapability::Touch => {
@@ -150,7 +165,7 @@ impl SeatHandler for WinitState {
                         touch.release();
                     }
                 }
-            }
+            },
             SeatCapability::Pointer => {
                 if let Some(relative_pointer) = seat_state.relative_pointer.take() {
                     relative_pointer.destroy();
@@ -171,15 +186,12 @@ impl SeatHandler for WinitState {
                         pointer.pointer().release();
                     }
                 }
-            }
+            },
             SeatCapability::Keyboard => {
                 seat_state.keyboard_state = None;
-            }
+                self.on_keyboard_destroy(&seat.id());
+            },
             _ => (),
-        }
-
-        if let Some(text_input) = seat_state.text_input.take() {
-            text_input.destroy();
         }
     }
 
@@ -199,6 +211,20 @@ impl SeatHandler for WinitState {
         seat: WlSeat,
     ) {
         let _ = self.seats.remove(&seat.id());
+        self.on_keyboard_destroy(&seat.id());
+    }
+}
+
+impl WinitState {
+    fn on_keyboard_destroy(&mut self, seat: &ObjectId) {
+        for (window_id, window) in self.windows.get_mut() {
+            let mut window = window.lock().unwrap();
+            let had_focus = window.has_focus();
+            window.remove_seat_focus(seat);
+            if had_focus != window.has_focus() {
+                self.events_sink.push_window_event(WindowEvent::Focused(false), *window_id);
+            }
+        }
     }
 }
 
