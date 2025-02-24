@@ -6,7 +6,7 @@ macro_rules! atom_manager {
     ($($name:ident $(:$lit:literal)?),*) => {
         x11rb::atom_manager! {
             /// The atoms used by `winit`
-            pub(crate) Atoms: AtomsCookie {
+            pub Atoms: AtomsCookie {
                 $($name $(:$lit)?,)*
             }
         }
@@ -14,7 +14,7 @@ macro_rules! atom_manager {
         /// Indices into the `Atoms` struct.
         #[derive(Copy, Clone, Debug)]
         #[allow(non_camel_case_types)]
-        pub(crate) enum AtomName {
+        pub enum AtomName {
             $($name,)*
         }
 
@@ -48,6 +48,8 @@ atom_manager! {
     _NET_WM_NAME,
     _NET_WM_PID,
     _NET_WM_PING,
+    _NET_WM_SYNC_REQUEST,
+    _NET_WM_SYNC_REQUEST_COUNTER,
     _NET_WM_STATE,
     _NET_WM_STATE_ABOVE,
     _NET_WM_STATE_BELOW,
@@ -100,7 +102,8 @@ atom_manager! {
     _NET_FRAME_EXTENTS,
     _NET_SUPPORTED,
     _NET_SUPPORTING_WM_CHECK,
-    _XEMBED
+    _XEMBED,
+    _XSETTINGS_SETTINGS
 }
 
 impl Index<AtomName> for Atoms {
@@ -111,6 +114,7 @@ impl Index<AtomName> for Atoms {
     }
 }
 
-pub(crate) use AtomName::*;
 // Make sure `None` is still defined.
 pub(crate) use core::option::Option::None;
+
+pub(crate) use AtomName::*;

@@ -1,14 +1,14 @@
+use std::error::Error;
 use std::ffi::CStr;
 use std::os::raw::c_short;
 use std::sync::Arc;
-use std::{mem, ptr};
+use std::{fmt, mem, ptr};
 
 use x11_dl::xlib::{XIMCallback, XIMPreeditCaretCallbackStruct, XIMPreeditDrawCallbackStruct};
 
-use crate::platform_impl::platform::x11::ime::input_method::{Style, XIMStyle};
-use crate::platform_impl::platform::x11::ime::{ImeEvent, ImeEventSender};
-
 use super::{ffi, util, XConnection, XError};
+use crate::platform_impl::platform::x11::ime::input_method::{InputMethod, Style, XIMStyle};
+use crate::platform_impl::platform::x11::ime::{ImeEvent, ImeEventSender};
 
 /// IME creation error.
 #[derive(Debug)]
@@ -20,16 +20,26 @@ pub enum ImeContextCreationError {
     Null,
 }
 
+impl fmt::Display for ImeContextCreationError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ImeContextCreationError::XError(err) => err.fmt(f),
+            ImeContextCreationError::Null => {
+                write!(f, "got null pointer from Xlib without exact reason")
+            },
+        }
+    }
+}
+
+impl Error for ImeContextCreationError {}
+
 /// The callback used by XIM preedit functions.
 type XIMProcNonnull = unsafe extern "C" fn(ffi::XIM, ffi::XPointer, ffi::XPointer);
 
 /// Wrapper for creating XIM callbacks.
 #[inline]
 fn create_xim_callback(client_data: ffi::XPointer, callback: XIMProcNonnull) -> ffi::XIMCallback {
-    XIMCallback {
-        client_data,
-        callback: Some(callback),
-    }
+    XIMCallback { client_data, callback: Some(callback) }
 }
 
 /// The server started preedit.
@@ -68,9 +78,7 @@ extern "C" fn preedit_done_callback(
 }
 
 fn calc_byte_position(text: &[char], pos: usize) -> usize {
-    text.iter()
-        .take(pos)
-        .fold(0, |byte_pos, text| byte_pos + text.len_utf8())
+    text.iter().take(pos).fold(0, |byte_pos, text| byte_pos + text.len_utf8())
 }
 
 /// Preedit text information to be drawn inline by the client.
@@ -86,7 +94,7 @@ extern "C" fn preedit_draw_callback(
     let chg_range =
         call_data.chg_first as usize..(call_data.chg_first + call_data.chg_length) as usize;
     if chg_range.start > client_data.text.len() || chg_range.end > client_data.text.len() {
-        log::warn!(
+        tracing::warn!(
             "invalid chg range: buffer length={}, but chg_first={} chg_lengthg={}",
             client_data.text.len(),
             call_data.chg_first,
@@ -112,9 +120,7 @@ extern "C" fn preedit_draw_callback(
 
         let new_text = unsafe { CStr::from_ptr(new_text) };
 
-        String::from(new_text.to_str().expect("Invalid UTF-8 String from IME"))
-            .chars()
-            .collect()
+        String::from(new_text.to_str().expect("Invalid UTF-8 String from IME")).chars().collect()
     };
     let mut old_text_tail = client_data.text.split_off(chg_range.end);
     client_data.text.truncate(chg_range.start);
@@ -165,18 +171,15 @@ struct PreeditCallbacks {
 impl PreeditCallbacks {
     pub fn new(client_data: ffi::XPointer) -> PreeditCallbacks {
         let start_callback = create_xim_callback(client_data, unsafe {
-            mem::transmute(preedit_start_callback as usize)
+            mem::transmute::<usize, unsafe extern "C" fn(ffi::XIM, ffi::XPointer, ffi::XPointer)>(
+                preedit_start_callback as usize,
+            )
         });
         let done_callback = create_xim_callback(client_data, preedit_done_callback);
         let caret_callback = create_xim_callback(client_data, preedit_caret_callback);
         let draw_callback = create_xim_callback(client_data, preedit_draw_callback);
 
-        PreeditCallbacks {
-            start_callback,
-            done_callback,
-            caret_callback,
-            draw_callback,
-        }
+        PreeditCallbacks { start_callback, done_callback, caret_callback, draw_callback }
     }
 }
 
@@ -194,20 +197,20 @@ struct ImeContextClientData {
 pub struct ImeContext {
     pub(crate) ic: ffi::XIC,
     pub(crate) ic_spot: ffi::XPoint,
-    pub(crate) style: Style,
-    // Since the data is passed shared between X11 XIM callbacks, but couldn't be direclty free from
-    // there we keep the pointer to automatically deallocate it.
+    pub(crate) allowed: bool,
+    // Since the data is passed shared between X11 XIM callbacks, but couldn't be directly free
+    // from there we keep the pointer to automatically deallocate it.
     _client_data: Box<ImeContextClientData>,
 }
 
 impl ImeContext {
     pub(crate) unsafe fn new(
         xconn: &Arc<XConnection>,
-        im: ffi::XIM,
-        style: Style,
+        im: &InputMethod,
         window: ffi::Window,
         ic_spot: Option<ffi::XPoint>,
         event_sender: ImeEventSender,
+        allowed: bool,
     ) -> Result<Self, ImeContextCreationError> {
         let client_data = Box::into_raw(Box::new(ImeContextClientData {
             window,
@@ -216,31 +219,33 @@ impl ImeContext {
             cursor_pos: 0,
         }));
 
+        let style = if allowed { im.preedit_style } else { im.none_style };
+
         let ic = match style as _ {
             Style::Preedit(style) => unsafe {
                 ImeContext::create_preedit_ic(
                     xconn,
-                    im,
+                    im.im,
                     style,
                     window,
                     client_data as ffi::XPointer,
                 )
             },
             Style::Nothing(style) => unsafe {
-                ImeContext::create_nothing_ic(xconn, im, style, window)
+                ImeContext::create_nothing_ic(xconn, im.im, style, window)
             },
-            Style::None(style) => unsafe { ImeContext::create_none_ic(xconn, im, style, window) },
+            Style::None(style) => unsafe {
+                ImeContext::create_none_ic(xconn, im.im, style, window)
+            },
         }
         .ok_or(ImeContextCreationError::Null)?;
 
-        xconn
-            .check_errors()
-            .map_err(ImeContextCreationError::XError)?;
+        xconn.check_errors().map_err(ImeContextCreationError::XError)?;
 
         let mut context = ImeContext {
             ic,
             ic_spot: ffi::XPoint { x: 0, y: 0 },
-            style,
+            allowed,
             _client_data: unsafe { Box::from_raw(client_data) },
         };
 
@@ -347,7 +352,7 @@ impl ImeContext {
     }
 
     pub fn is_allowed(&self) -> bool {
-        !matches!(self.style, Style::None(_))
+        self.allowed
     }
 
     // Set the spot for preedit text. Setting spot isn't working with libX11 when preedit callbacks

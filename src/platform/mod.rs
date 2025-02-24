@@ -14,13 +14,14 @@ pub mod orbital;
 pub mod startup_notify;
 #[cfg(any(wayland_platform, docsrs))]
 pub mod wayland;
-#[cfg(any(wasm_platform, docsrs))]
+#[cfg(any(web_platform, docsrs))]
 pub mod web;
 #[cfg(any(windows_platform, docsrs))]
 pub mod windows;
 #[cfg(any(x11_platform, docsrs))]
 pub mod x11;
 
+#[allow(unused_imports)]
 #[cfg(any(
     windows_platform,
     macos_platform,
@@ -46,15 +47,10 @@ pub mod pump_events;
     macos_platform,
     x11_platform,
     wayland_platform,
+    orbital_platform,
     docsrs
 ))]
 pub mod modifier_supplement;
 
-#[cfg(any(
-    windows_platform,
-    macos_platform,
-    x11_platform,
-    wayland_platform,
-    docsrs
-))]
+#[cfg(any(windows_platform, macos_platform, x11_platform, wayland_platform, docsrs))]
 pub mod scancode;

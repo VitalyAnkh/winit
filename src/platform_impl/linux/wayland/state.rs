@@ -3,16 +3,14 @@ use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex};
 
 use ahash::AHashMap;
-
+use sctk::compositor::{CompositorHandler, CompositorState};
+use sctk::output::{OutputHandler, OutputState};
 use sctk::reexports::calloop::LoopHandle;
 use sctk::reexports::client::backend::ObjectId;
 use sctk::reexports::client::globals::GlobalList;
 use sctk::reexports::client::protocol::wl_output::WlOutput;
 use sctk::reexports::client::protocol::wl_surface::WlSurface;
 use sctk::reexports::client::{Connection, Proxy, QueueHandle};
-
-use sctk::compositor::{CompositorHandler, CompositorState};
-use sctk::output::{OutputHandler, OutputState};
 use sctk::registry::{ProvidesRegistryState, RegistryState};
 use sctk::seat::pointer::ThemedPointer;
 use sctk::seat::SeatState;
@@ -23,6 +21,7 @@ use sctk::shm::slot::SlotPool;
 use sctk::shm::{Shm, ShmHandler};
 use sctk::subcompositor::SubcompositorState;
 
+use crate::error::OsError;
 use crate::platform_impl::wayland::event_loop::sink::EventSink;
 use crate::platform_impl::wayland::output::MonitorHandle;
 use crate::platform_impl::wayland::seat::{
@@ -34,8 +33,7 @@ use crate::platform_impl::wayland::types::wp_fractional_scaling::FractionalScali
 use crate::platform_impl::wayland::types::wp_viewporter::ViewporterState;
 use crate::platform_impl::wayland::types::xdg_activation::XdgActivationState;
 use crate::platform_impl::wayland::window::{WindowRequests, WindowState};
-use crate::platform_impl::wayland::{WaylandError, WindowId};
-use crate::platform_impl::OsError;
+use crate::platform_impl::wayland::WindowId;
 
 /// Winit's Wayland state.
 pub struct WinitState {
@@ -60,7 +58,7 @@ pub struct WinitState {
     /// The pool where custom cursors are allocated.
     pub custom_cursor_pool: Arc<Mutex<SlotPool>>,
 
-    /// The XDG shell that is used for widnows.
+    /// The XDG shell that is used for windows.
     pub xdg_shell: XdgShell,
 
     /// The currently present windows.
@@ -72,7 +70,7 @@ pub struct WinitState {
     /// The events that were generated directly from the window.
     pub window_events_sink: Arc<Mutex<EventSink>>,
 
-    /// The update for the `windows` comming from the compositor.
+    /// The update for the `windows` coming from the compositor.
     pub window_compositor_updates: Vec<WindowCompositorUpdate>,
 
     /// Currently handled seats.
@@ -115,6 +113,9 @@ pub struct WinitState {
     /// Whether we have dispatched events to the user thus we want to
     /// send `AboutToWait` and normally wakeup the user.
     pub dispatched_events: bool,
+
+    /// Whether the user initiated a wake up.
+    pub proxy_wake_up: bool,
 }
 
 impl WinitState {
@@ -125,7 +126,7 @@ impl WinitState {
     ) -> Result<Self, OsError> {
         let registry_state = RegistryState::new(globals);
         let compositor_state =
-            CompositorState::bind(globals, queue_handle).map_err(WaylandError::Bind)?;
+            CompositorState::bind(globals, queue_handle).map_err(|err| os_error!(err))?;
         let subcompositor_state = match SubcompositorState::bind(
             compositor_state.wl_compositor().clone(),
             globals,
@@ -133,9 +134,9 @@ impl WinitState {
         ) {
             Ok(c) => Some(c),
             Err(e) => {
-                log::warn!("Subcompositor protocol not available, ignoring CSD: {e:?}");
+                tracing::warn!("Subcompositor protocol not available, ignoring CSD: {e:?}");
                 None
-            }
+            },
         };
 
         let output_state = OutputState::new(globals, queue_handle);
@@ -155,7 +156,7 @@ impl WinitState {
                 (None, None)
             };
 
-        let shm = Shm::bind(globals, queue_handle).map_err(WaylandError::Bind)?;
+        let shm = Shm::bind(globals, queue_handle).map_err(|err| os_error!(err))?;
         let custom_cursor_pool = Arc::new(Mutex::new(SlotPool::new(2, &shm).unwrap()));
 
         Ok(Self {
@@ -167,7 +168,7 @@ impl WinitState {
             shm,
             custom_cursor_pool,
 
-            xdg_shell: XdgShell::bind(globals, queue_handle).map_err(WaylandError::Bind)?,
+            xdg_shell: XdgShell::bind(globals, queue_handle).map_err(|err| os_error!(err))?,
             xdg_activation: XdgActivationState::bind(globals, queue_handle).ok(),
 
             windows: Default::default(),
@@ -192,6 +193,7 @@ impl WinitState {
             loop_handle,
             // Make it true by default.
             dispatched_events: true,
+            proxy_wake_up: false,
         })
     }
 
@@ -218,8 +220,7 @@ impl WinitState {
             {
                 pos
             } else {
-                self.window_compositor_updates
-                    .push(WindowCompositorUpdate::new(window_id));
+                self.window_compositor_updates.push(WindowCompositorUpdate::new(window_id));
                 self.window_compositor_updates.len() - 1
             };
 
@@ -240,9 +241,7 @@ impl WinitState {
     }
 
     pub fn queue_close(updates: &mut Vec<WindowCompositorUpdate>, window_id: WindowId) {
-        let pos = if let Some(pos) = updates
-            .iter()
-            .position(|update| update.window_id == window_id)
+        let pos = if let Some(pos) = updates.iter().position(|update| update.window_id == window_id)
         {
             pos
         } else {
@@ -276,15 +275,12 @@ impl WindowHandler for WinitState {
     ) {
         let window_id = super::make_wid(window.wl_surface());
 
-        let pos = if let Some(pos) = self
-            .window_compositor_updates
-            .iter()
-            .position(|update| update.window_id == window_id)
+        let pos = if let Some(pos) =
+            self.window_compositor_updates.iter().position(|update| update.window_id == window_id)
         {
             pos
         } else {
-            self.window_compositor_updates
-                .push(WindowCompositorUpdate::new(window_id));
+            self.window_compositor_updates.push(WindowCompositorUpdate::new(window_id));
             self.window_compositor_updates.len() - 1
         };
 
@@ -296,12 +292,19 @@ impl WindowHandler for WinitState {
             .expect("got configure for dead window.")
             .lock()
             .unwrap()
-            .configure(
-                configure,
-                &self.shm,
-                &self.subcompositor_state,
-                &mut self.events_sink,
-            );
+            .configure(configure, &self.shm, &self.subcompositor_state);
+
+        // NOTE: configure demands wl_surface::commit, however winit doesn't commit on behalf of the
+        // users, since it can break a lot of things, thus it'll ask users to redraw instead.
+        self.window_requests
+            .get_mut()
+            .get(&window_id)
+            .unwrap()
+            .redraw_requested
+            .store(true, Ordering::Relaxed);
+
+        // Manually mark that we've got an event, since configure may not generate a resize.
+        self.dispatched_events = true;
     }
 }
 
@@ -311,10 +314,7 @@ impl OutputHandler for WinitState {
     }
 
     fn new_output(&mut self, _: &Connection, _: &QueueHandle<Self>, output: WlOutput) {
-        self.monitors
-            .lock()
-            .unwrap()
-            .push(MonitorHandle::new(output));
+        self.monitors.lock().unwrap().push(MonitorHandle::new(output));
     }
 
     fn update_output(&mut self, _: &Connection, _: &QueueHandle<Self>, updated: WlOutput) {
@@ -341,10 +341,28 @@ impl CompositorHandler for WinitState {
         &mut self,
         _: &Connection,
         _: &QueueHandle<Self>,
-        _: &wayland_client::protocol::wl_surface::WlSurface,
+        _: &WlSurface,
         _: wayland_client::protocol::wl_output::Transform,
     ) {
         // TODO(kchibisov) we need to expose it somehow in winit.
+    }
+
+    fn surface_enter(
+        &mut self,
+        _: &Connection,
+        _: &QueueHandle<Self>,
+        _: &WlSurface,
+        _: &WlOutput,
+    ) {
+    }
+
+    fn surface_leave(
+        &mut self,
+        _: &Connection,
+        _: &QueueHandle<Self>,
+        _: &WlSurface,
+        _: &WlOutput,
+    ) {
     }
 
     fn scale_factor_changed(
@@ -381,14 +399,14 @@ impl CompositorHandler for WinitState {
 }
 
 impl ProvidesRegistryState for WinitState {
+    sctk::registry_handlers![OutputState, SeatState];
+
     fn registry(&mut self) -> &mut RegistryState {
         &mut self.registry_state
     }
-
-    sctk::registry_handlers![OutputState, SeatState];
 }
 
-// The window update comming from the compositor.
+// The window update coming from the compositor.
 #[derive(Debug, Clone, Copy)]
 pub struct WindowCompositorUpdate {
     /// The id of the window this updates belongs to.
@@ -406,12 +424,7 @@ pub struct WindowCompositorUpdate {
 
 impl WindowCompositorUpdate {
     fn new(window_id: WindowId) -> Self {
-        Self {
-            window_id,
-            resized: false,
-            scale_changed: false,
-            close_window: false,
-        }
+        Self { window_id, resized: false, scale_changed: false, close_window: false }
     }
 }
 

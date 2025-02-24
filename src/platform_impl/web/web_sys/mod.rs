@@ -7,18 +7,23 @@ mod intersection_handle;
 mod media_query_handle;
 mod pointer;
 mod resize_scaling;
+mod safe_area;
 mod schedule;
 
-pub use self::canvas::Canvas;
-pub use self::canvas::Style;
-pub use self::event::ButtonsState;
+use std::cell::OnceCell;
+
+use js_sys::Array;
+use wasm_bindgen::closure::Closure;
+use wasm_bindgen::prelude::wasm_bindgen;
+use wasm_bindgen::JsCast;
+use web_sys::{Document, HtmlCanvasElement, Navigator, PageTransitionEvent, VisibilityState};
+
+pub use self::canvas::{Canvas, Style};
 pub use self::event_handle::EventListenerHandle;
 pub use self::resize_scaling::ResizeScaleHandle;
+pub use self::safe_area::SafeAreaHandle;
 pub use self::schedule::Schedule;
-
 use crate::dpi::{LogicalPosition, LogicalSize};
-use wasm_bindgen::closure::Closure;
-use web_sys::{Document, HtmlCanvasElement, PageTransitionEvent, VisibilityState};
 
 pub fn throw(msg: &str) {
     wasm_bindgen::throw_str(msg);
@@ -40,10 +45,7 @@ pub fn on_page_transition(
     let show_listener =
         event_handle::EventListenerHandle::new(window.clone(), "pageshow", show_closure);
     let hide_listener = event_handle::EventListenerHandle::new(window, "pagehide", hide_closure);
-    PageTransitionEventHandle {
-        _show_listener: show_listener,
-        _hide_listener: hide_listener,
-    }
+    PageTransitionEventHandle { _show_listener: show_listener, _hide_listener: hide_listener }
 }
 
 pub fn scale_factor(window: &web_sys::Window) -> f64 {
@@ -154,11 +156,7 @@ pub fn style_size_property(style: &Style, property: &str) -> f64 {
 }
 
 pub fn is_dark_mode(window: &web_sys::Window) -> Option<bool> {
-    window
-        .match_media("(prefers-color-scheme: dark)")
-        .ok()
-        .flatten()
-        .map(|media| media.matches())
+    window.match_media("(prefers-color-scheme: dark)").ok().flatten().map(|media| media.matches())
 }
 
 pub fn is_visible(document: &Document) -> bool {
@@ -166,3 +164,99 @@ pub fn is_visible(document: &Document) -> bool {
 }
 
 pub type RawCanvasType = HtmlCanvasElement;
+
+#[derive(Clone, Copy)]
+pub enum Engine {
+    Chromium,
+    Gecko,
+    WebKit,
+}
+
+struct UserAgentData {
+    engine: Option<Engine>,
+    chrome_linux: bool,
+}
+
+thread_local! {
+    static USER_AGENT_DATA: OnceCell<UserAgentData> = const { OnceCell::new() };
+}
+
+pub fn chrome_linux(navigator: &Navigator) -> bool {
+    USER_AGENT_DATA.with(|data| data.get_or_init(|| user_agent(navigator)).chrome_linux)
+}
+
+pub fn engine(navigator: &Navigator) -> Option<Engine> {
+    USER_AGENT_DATA.with(|data| data.get_or_init(|| user_agent(navigator)).engine)
+}
+
+fn user_agent(navigator: &Navigator) -> UserAgentData {
+    #[wasm_bindgen]
+    extern "C" {
+        #[wasm_bindgen(extends = Navigator)]
+        type NavigatorExt;
+
+        #[wasm_bindgen(method, getter, js_name = userAgentData)]
+        fn user_agent_data(this: &NavigatorExt) -> Option<NavigatorUaData>;
+
+        type NavigatorUaData;
+
+        #[wasm_bindgen(method, getter)]
+        fn brands(this: &NavigatorUaData) -> Array;
+
+        #[wasm_bindgen(method, getter)]
+        fn platform(this: &NavigatorUaData) -> String;
+
+        type NavigatorUaBrandVersion;
+
+        #[wasm_bindgen(method, getter)]
+        fn brand(this: &NavigatorUaBrandVersion) -> String;
+    }
+
+    let navigator: &NavigatorExt = navigator.unchecked_ref();
+
+    if let Some(data) = navigator.user_agent_data() {
+        let engine = 'engine: {
+            for brand in data
+                .brands()
+                .iter()
+                .map(NavigatorUaBrandVersion::unchecked_from_js)
+                .map(|brand| brand.brand())
+            {
+                match brand.as_str() {
+                    "Chromium" => break 'engine Some(Engine::Chromium),
+                    // TODO: verify when Firefox actually implements it.
+                    "Gecko" => break 'engine Some(Engine::Gecko),
+                    // TODO: verify when Safari actually implements it.
+                    "WebKit" => break 'engine Some(Engine::WebKit),
+                    _ => (),
+                }
+            }
+
+            None
+        };
+
+        let chrome_linux = matches!(engine, Some(Engine::Chromium))
+            .then(|| data.platform() == "Linux")
+            .unwrap_or(false);
+
+        UserAgentData { engine, chrome_linux }
+    } else {
+        let engine = 'engine: {
+            let Ok(data) = navigator.user_agent() else {
+                break 'engine None;
+            };
+
+            if data.contains("Chrome/") {
+                Some(Engine::Chromium)
+            } else if data.contains("Gecko/") {
+                Some(Engine::Gecko)
+            } else if data.contains("AppleWebKit/") {
+                Some(Engine::WebKit)
+            } else {
+                None
+            }
+        };
+
+        UserAgentData { engine, chrome_linux: false }
+    }
+}
