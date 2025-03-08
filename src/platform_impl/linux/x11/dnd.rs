@@ -1,18 +1,16 @@
-use std::{
-    io,
-    os::raw::*,
-    path::{Path, PathBuf},
-    str::Utf8Error,
-    sync::Arc,
-};
+use std::io;
+use std::os::raw::*;
+use std::path::{Path, PathBuf};
+use std::str::Utf8Error;
+use std::sync::Arc;
 
+use dpi::PhysicalPosition;
 use percent_encoding::percent_decode;
 use x11rb::protocol::xproto::{self, ConnectionExt};
 
-use super::{
-    atoms::{AtomName::None as DndNone, *},
-    util, CookieResultExt, X11Error, XConnection,
-};
+use super::atoms::AtomName::None as DndNone;
+use super::atoms::*;
+use super::{util, CookieResultExt, X11Error, XConnection};
 
 #[derive(Debug, Clone, Copy)]
 pub enum DndState {
@@ -23,10 +21,10 @@ pub enum DndState {
 #[derive(Debug)]
 pub enum DndDataParseError {
     EmptyData,
-    InvalidUtf8(Utf8Error),
-    HostnameSpecified(String),
-    UnexpectedProtocol(String),
-    UnresolvablePath(io::Error),
+    InvalidUtf8(#[allow(dead_code)] Utf8Error),
+    HostnameSpecified(#[allow(dead_code)] String),
+    UnexpectedProtocol(#[allow(dead_code)] String),
+    UnresolvablePath(#[allow(dead_code)] io::Error),
 }
 
 impl From<Utf8Error> for DndDataParseError {
@@ -41,15 +39,20 @@ impl From<io::Error> for DndDataParseError {
     }
 }
 
-pub(crate) struct Dnd {
+#[derive(Debug)]
+pub struct Dnd {
     xconn: Arc<XConnection>,
     // Populated by XdndEnter event handler
     pub version: Option<c_long>,
     pub type_list: Option<Vec<xproto::Atom>>,
     // Populated by XdndPosition event handler
     pub source_window: Option<xproto::Window>,
+    // Populated by XdndPosition event handler
+    pub position: PhysicalPosition<f64>,
     // Populated by SelectionNotify event handler (triggered by XdndPosition event handler)
     pub result: Option<Result<Vec<PathBuf>, DndDataParseError>>,
+    // Populated by SelectionNotify event handler (triggered by XdndPosition event handler)
+    pub dragging: bool,
 }
 
 impl Dnd {
@@ -59,7 +62,9 @@ impl Dnd {
             version: None,
             type_list: None,
             source_window: None,
+            position: PhysicalPosition::default(),
             result: None,
+            dragging: false,
         })
     }
 
@@ -68,6 +73,7 @@ impl Dnd {
         self.type_list = None;
         self.source_window = None;
         self.result = None;
+        self.dragging = false;
     }
 
     pub unsafe fn send_status(
@@ -82,13 +88,13 @@ impl Dnd {
             DndState::Rejected => (0, atoms[DndNone]),
         };
         self.xconn
-            .send_client_msg(
-                target_window,
-                target_window,
-                atoms[XdndStatus] as _,
-                None,
-                [this_window, accepted, 0, 0, action as _],
-            )?
+            .send_client_msg(target_window, target_window, atoms[XdndStatus] as _, None, [
+                this_window,
+                accepted,
+                0,
+                0,
+                action as _,
+            ])?
             .ignore_error();
 
         Ok(())
@@ -106,13 +112,13 @@ impl Dnd {
             DndState::Rejected => (0, atoms[DndNone]),
         };
         self.xconn
-            .send_client_msg(
-                target_window,
-                target_window,
-                atoms[XdndFinished] as _,
-                None,
-                [this_window, accepted, action as _, 0, 0],
-            )?
+            .send_client_msg(target_window, target_window, atoms[XdndFinished] as _, None, [
+                this_window,
+                accepted,
+                action as _,
+                0,
+                0,
+            ])?
             .ignore_error();
 
         Ok(())
@@ -149,8 +155,7 @@ impl Dnd {
         window: xproto::Window,
     ) -> Result<Vec<c_uchar>, util::GetPropertyError> {
         let atoms = self.xconn.atoms();
-        self.xconn
-            .get_property(window, atoms[XdndSelection], atoms[TextUriList])
+        self.xconn.get_property(window, atoms[XdndSelection], atoms[TextUriList])
     }
 
     pub fn parse_data(&self, data: &mut [c_uchar]) -> Result<Vec<PathBuf>, DndDataParseError> {

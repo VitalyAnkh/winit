@@ -23,9 +23,11 @@
 
 use std::env;
 
-use crate::error::NotSupportedError;
-use crate::event_loop::{AsyncRequestSerial, EventLoopWindowTarget};
-use crate::window::{ActivationToken, Window, WindowBuilder};
+use crate::error::{NotSupportedError, RequestError};
+use crate::event_loop::{ActiveEventLoop, AsyncRequestSerial};
+#[cfg(wayland_platform)]
+use crate::platform::wayland::ActiveEventLoopExtWayland;
+use crate::window::{ActivationToken, Window, WindowAttributes};
 
 /// The variable which is used mostly on X11.
 const X11_VAR: &str = "DESKTOP_STARTUP_ID";
@@ -44,10 +46,10 @@ pub trait WindowExtStartupNotify {
     /// Request a new activation token.
     ///
     /// The token will be delivered inside
-    fn request_activation_token(&self) -> Result<AsyncRequestSerial, NotSupportedError>;
+    fn request_activation_token(&self) -> Result<AsyncRequestSerial, RequestError>;
 }
 
-pub trait WindowBuilderExtStartupNotify {
+pub trait WindowAttributesExtStartupNotify {
     /// Use this [`ActivationToken`] during window creation.
     ///
     /// Not using such a token upon a window could make your window not gaining
@@ -55,26 +57,41 @@ pub trait WindowBuilderExtStartupNotify {
     fn with_activation_token(self, token: ActivationToken) -> Self;
 }
 
-impl<T> EventLoopExtStartupNotify for EventLoopWindowTarget<T> {
+impl EventLoopExtStartupNotify for dyn ActiveEventLoop + '_ {
     fn read_token_from_env(&self) -> Option<ActivationToken> {
-        match self.p {
-            #[cfg(wayland_platform)]
-            crate::platform_impl::EventLoopWindowTarget::Wayland(_) => env::var(WAYLAND_VAR),
-            #[cfg(x11_platform)]
-            crate::platform_impl::EventLoopWindowTarget::X(_) => env::var(X11_VAR),
+        #[cfg(x11_platform)]
+        let _is_wayland = false;
+        #[cfg(wayland_platform)]
+        let _is_wayland = self.is_wayland();
+
+        if _is_wayland {
+            env::var(WAYLAND_VAR).ok().map(ActivationToken::from_raw)
+        } else {
+            env::var(X11_VAR).ok().map(ActivationToken::from_raw)
         }
-        .ok()
-        .map(ActivationToken::_new)
     }
 }
 
-impl WindowExtStartupNotify for Window {
-    fn request_activation_token(&self) -> Result<AsyncRequestSerial, NotSupportedError> {
-        self.window.request_activation_token()
+impl WindowExtStartupNotify for dyn Window + '_ {
+    fn request_activation_token(&self) -> Result<AsyncRequestSerial, RequestError> {
+        #[cfg(wayland_platform)]
+        if let Some(window) = self.as_any().downcast_ref::<crate::platform_impl::wayland::Window>()
+        {
+            return window.request_activation_token();
+        }
+
+        #[cfg(x11_platform)]
+        if let Some(window) =
+            self.as_any().downcast_ref::<crate::platform_impl::x11::window::Window>()
+        {
+            return window.request_activation_token();
+        }
+
+        Err(NotSupportedError::new("startup notify is not supported").into())
     }
 }
 
-impl WindowBuilderExtStartupNotify for WindowBuilder {
+impl WindowAttributesExtStartupNotify for WindowAttributes {
     fn with_activation_token(mut self, token: ActivationToken) -> Self {
         self.platform_specific.activation_token = Some(token);
         self
@@ -94,6 +111,6 @@ pub fn reset_activation_token_env() {
 ///
 /// This could be used before running daemon processes.
 pub fn set_activation_token_env(token: ActivationToken) {
-    env::set_var(X11_VAR, &token._token);
-    env::set_var(WAYLAND_VAR, token._token);
+    env::set_var(X11_VAR, &token.token);
+    env::set_var(WAYLAND_VAR, token.token);
 }

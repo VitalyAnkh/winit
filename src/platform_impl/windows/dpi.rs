@@ -2,19 +2,15 @@
 
 use std::sync::Once;
 
-use windows_sys::Win32::{
-    Foundation::{HWND, S_OK},
-    Graphics::Gdi::{
-        GetDC, GetDeviceCaps, MonitorFromWindow, HMONITOR, LOGPIXELSX, MONITOR_DEFAULTTONEAREST,
-    },
-    UI::{
-        HiDpi::{
-            DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE, DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2,
-            MDT_EFFECTIVE_DPI, PROCESS_PER_MONITOR_DPI_AWARE,
-        },
-        WindowsAndMessaging::IsProcessDPIAware,
-    },
+use windows_sys::Win32::Foundation::{HWND, S_OK};
+use windows_sys::Win32::Graphics::Gdi::{
+    GetDC, GetDeviceCaps, MonitorFromWindow, HMONITOR, LOGPIXELSX, MONITOR_DEFAULTTONEAREST,
 };
+use windows_sys::Win32::UI::HiDpi::{
+    DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE, DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2,
+    MDT_EFFECTIVE_DPI, PROCESS_PER_MONITOR_DPI_AWARE,
+};
+use windows_sys::Win32::UI::WindowsAndMessaging::IsProcessDPIAware;
 
 use crate::platform_impl::platform::util::{
     ENABLE_NON_CLIENT_DPI_SCALING, GET_DPI_FOR_MONITOR, GET_DPI_FOR_WINDOW, SET_PROCESS_DPI_AWARE,
@@ -77,7 +73,7 @@ pub fn dpi_to_scale_factor(dpi: u32) -> f64 {
 
 pub unsafe fn hwnd_dpi(hwnd: HWND) -> u32 {
     let hdc = unsafe { GetDC(hwnd) };
-    if hdc == 0 {
+    if hdc.is_null() {
         panic!("[winit] `GetDC` returned null!");
     }
     if let Some(GetDpiForWindow) = *GET_DPI_FOR_WINDOW {
@@ -89,7 +85,7 @@ pub unsafe fn hwnd_dpi(hwnd: HWND) -> u32 {
     } else if let Some(GetDpiForMonitor) = *GET_DPI_FOR_MONITOR {
         // We are on Windows 8.1 or later.
         let monitor = unsafe { MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST) };
-        if monitor == 0 {
+        if monitor.is_null() {
             return BASE_DPI;
         }
 
@@ -105,7 +101,7 @@ pub unsafe fn hwnd_dpi(hwnd: HWND) -> u32 {
         if unsafe { IsProcessDPIAware() } != false.into() {
             // If the process is DPI aware, then scaling must be handled by the application using
             // this DPI value.
-            unsafe { GetDeviceCaps(hdc, LOGPIXELSX) as u32 }
+            unsafe { GetDeviceCaps(hdc, LOGPIXELSX as i32) as u32 }
         } else {
             // If the process is DPI unaware, then scaling is performed by the OS; we thus return
             // 96 (scale factor 1.0) to prevent the window from being re-scaled by both the

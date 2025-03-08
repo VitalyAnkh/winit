@@ -3,15 +3,15 @@
 
 use std::ffi::c_void;
 
-use windows_sys::{
-    core::{IUnknown, GUID, HRESULT},
-    Win32::{
-        Foundation::{BOOL, HWND, POINTL},
-        System::Com::{
-            IAdviseSink, IDataObject, IEnumFORMATETC, IEnumSTATDATA, FORMATETC, STGMEDIUM,
-        },
-    },
-};
+use windows_sys::core::{GUID, HRESULT};
+use windows_sys::Win32::Foundation::{BOOL, HWND, POINTL};
+use windows_sys::Win32::System::Com::{FORMATETC, STGMEDIUM};
+
+pub type IUnknown = *mut c_void;
+pub type IAdviseSink = *mut c_void;
+pub type IDataObject = *mut c_void;
+pub type IEnumFORMATETC = *mut c_void;
+pub type IEnumSTATDATA = *mut c_void;
 
 #[repr(C)]
 pub struct IUnknownVtbl {
@@ -76,13 +76,13 @@ pub struct IDropTargetVtbl {
         This: *mut IDropTarget,
         pDataObj: *const IDataObject,
         grfKeyState: u32,
-        pt: *const POINTL,
+        pt: POINTL,
         pdwEffect: *mut u32,
     ) -> HRESULT,
     pub DragOver: unsafe extern "system" fn(
         This: *mut IDropTarget,
         grfKeyState: u32,
-        pt: *const POINTL,
+        pt: POINTL,
         pdwEffect: *mut u32,
     ) -> HRESULT,
     pub DragLeave: unsafe extern "system" fn(This: *mut IDropTarget) -> HRESULT,
@@ -90,7 +90,7 @@ pub struct IDropTargetVtbl {
         This: *mut IDropTarget,
         pDataObj: *const IDataObject,
         grfKeyState: u32,
-        pt: *const POINTL,
+        pt: POINTL,
         pdwEffect: *mut u32,
     ) -> HRESULT,
 }
@@ -138,10 +138,10 @@ pub const CLSID_TaskbarList: GUID = GUID {
 };
 
 pub const IID_ITaskbarList: GUID = GUID {
-    data1: 0x56FDF342,
-    data2: 0xFD6D,
-    data3: 0x11D0,
-    data4: [0x95, 0x8A, 0x00, 0x60, 0x97, 0xC9, 0xA0, 0x90],
+    data1: 0x56fdf342,
+    data2: 0xfd6d,
+    data3: 0x11d0,
+    data4: [0x95, 0x8a, 0x00, 0x60, 0x97, 0xc9, 0xa0, 0x90],
 };
 
 pub const IID_ITaskbarList2: GUID = GUID {

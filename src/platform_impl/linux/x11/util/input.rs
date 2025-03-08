@@ -1,13 +1,11 @@
 use std::{slice, str};
-use x11rb::protocol::{
-    xinput::{self, ConnectionExt as _},
-    xkb,
-};
+
+use x11rb::protocol::xinput::{self, ConnectionExt as _};
+use x11rb::protocol::xkb;
 
 use super::*;
 
 pub const VIRTUAL_CORE_POINTER: u16 = 2;
-pub const VIRTUAL_CORE_KEYBOARD: u16 = 3;
 
 // A base buffer size of 1kB uses a negligible amount of RAM while preventing us from having to
 // re-allocate (and make another round-trip) in the *vast* majority of cases.
@@ -22,13 +20,10 @@ impl XConnection {
         mask: xinput::XIEventMask,
     ) -> Result<VoidCookie<'_>, X11Error> {
         self.xcb_connection()
-            .xinput_xi_select_events(
-                window,
-                &[xinput::EventMask {
-                    deviceid: device_id,
-                    mask: vec![mask],
-                }],
-            )
+            .xinput_xi_select_events(window, &[xinput::EventMask {
+                deviceid: device_id,
+                mask: vec![mask],
+            }])
             .map_err(Into::into)
     }
 
@@ -45,7 +40,7 @@ impl XConnection {
             self.flush_requests()?;
             Ok(true)
         } else {
-            log::error!("Could not select XKB events: The XKB extension is not initialized!");
+            tracing::error!("Could not select XKB events: The XKB extension is not initialized!");
             Ok(false)
         }
     }
